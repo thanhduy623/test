@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Thử kính ảo - Debug</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- MindAR Face Tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.0/dist/mindar-aframe-face.prod.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            z-index: 99;
+            font-family: Arial, sans-serif;
+        }
+
+        #video-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+        }
+
+        a-scene {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        canvas.debug-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="info">Đang khởi động camera...</div>
+    <video id="video-bg" autoplay playsinline muted></video>
+
+    <a-scene mindar-face="autoStart: true;" embedded vr-mode-ui="enabled: false">
+        <a-assets>
+            <a-asset-item id="glasses" src="assets/glasses.glb"></a-asset-item>
+        </a-assets>
+
+        <a-camera mindar-face-camera></a-camera>
+
+        <!-- Debug mesh -->
+        <a-entity mindar-face-target="targetIndex: 0">
+            <a-face-mesh color="green" opacity="0.3"></a-face-mesh>
+        </a-entity>
+
+        <!-- Kính -->
+        <a-entity mindar-face-target="targetIndex: 3">
+            <a-gltf-model src="#glasses" position="0 -0.05 -0.5" scale="3 3 3"></a-gltf-model>
+        </a-entity>
+    </a-scene>
+
+    <canvas id="face-overlay" class="debug-box"></canvas>
+
+    <script>
+        const info = document.getElementById('info');
+        const scene = document.querySelector('a-scene');
+        const overlay = document.getElementById('face-overlay');
+        const ctx = overlay.getContext('2d');
+
+        // Step 1: Bật camera nền ngay
+        console.log("Step 1: Bắt đầu mở camera...");
+        navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+            console.log("Step 2: Camera đã bật", stream);
+            document.getElementById('video-bg').srcObject = stream;
+            info.innerText = "Camera đã bật, đang tải AR...";
+        }).catch(err => {
+            console.error("Step 2: Không mở được camera:", err);
+            info.innerText = "❌ Không mở được camera: " + err.message;
+        });
+
+        // Step 3: MindAR ready
+        scene.addEventListener("mindar-face-ready", () => {
+            console.log("Step 3: MindAR đã sẵn sàng");
+            info.innerText = "Camera sẵn sàng. Hãy nhìn vào camera.";
+        });
+
+        // Step 4: Phát hiện khuôn mặt
+        scene.addEventListener("mindar-face-found", () => {
+            console.log("Step 4: Phát hiện khuôn mặt");
+            info.innerText = "Phát hiện khuôn mặt 😎";
+        });
+
+        // Step 5: Mất khuôn mặt
+        scene.addEventListener("mindar-face-lost", () => {
+            console.log("Step 5: Mất khuôn mặt");
+            info.innerText = "Mất khuôn mặt 👀";
+        });
+
+        // Step 6: Overlay debug khuôn mặt
+        const mindarSystem = scene.systems['mindar-face-system'];
+        if (mindarSystem) {
+            overlay.width = window.innerWidth;
+            overlay.height = window.innerHeight;
+
+            const oldUpdate = mindarSystem.tick.bind(mindarSystem);
+            mindarSystem.tick = (time, delta) => {
+                oldUpdate(time, delta);
+
+                // Clear overlay
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+                // Vẽ rectangle quanh mặt nếu tracking
+                const faces = mindarSystem.faceTracker?.faces || [];
+                if (faces.length > 0) {
+                    faces.forEach(f => {
+                        ctx.strokeStyle = "red";
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(f.x * overlay.width, f.y * overlay.height, f.width * overlay.width, f.height * overlay.height);
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
